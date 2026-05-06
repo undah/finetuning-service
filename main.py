@@ -31,12 +31,12 @@ app.add_middleware(
 )
 
 # ── Config (set as Railway env vars) ─────────────────────────────────────────
-SUPABASE_URL    = os.environ["SUPABASE_URL"]
-SUPABASE_KEY    = os.environ["SUPABASE_KEY"]
+SUPABASE_URL    = os.environ["https://bqpfsdeyvclmkqxtfiqn.supabase.co"]
+SUPABASE_KEY    = os.environ["eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJxcGZzZGV5dmNsbWtxeHRmaXFuIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2OTE4NjgwMCwiZXhwIjoyMDg0NzYyODAwfQ.W7i8g9mxSooiT2lqwvz6YYPOgJxgG1isnDnkwARQQ00"]
 OPENAI_API_KEY  = os.environ["OPENAI_API_KEY"]
-SETUPS_TABLE    = os.getenv("SETUPS_TABLE",   "trading_setups")
-MISTAKES_TABLE  = os.getenv("MISTAKES_TABLE", "trading_mistakes")
-TRAIN_RATIO     = float(os.getenv("TRAIN_RATIO", "0.85"))
+SETUPS_TABLE    = os.getenv("SETUPS_TABLE",   "training_entries")
+MISTAKES_TABLE  = os.getenv("MISTAKES_TABLE", "mistakes")
+TRAIN_RATIO     = float(os.getenv("TRAIN_RATIO", "0.90"))
 LOG_PATH        = "/tmp/finetune_log.json"
 
 # ── System prompts ────────────────────────────────────────────────────────────
