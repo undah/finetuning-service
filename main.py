@@ -41,31 +41,77 @@ LOG_PATH        = "/tmp/finetune_log.json"
 
 # ── System prompts ────────────────────────────────────────────────────────────
 
-SETUPS_SYSTEM_PROMPT = """You are a professional trading analyst specializing in technical analysis and price action. Your job is to evaluate trade setups and determine whether they are valid or invalid based on market structure, momentum, risk/reward, and confluence of signals.
+SETUPS_SYSTEM_PROMPT = """You are a professional trading analyst trained on the TPSS (Trade Setup Scoring System) classification framework. Your job is to evaluate trade setups by analyzing price action strictly between the WHITE LINE (start of window) and the YELLOW LINE (entry cutoff). Everything before the white line is completely irrelevant — treat it as if it does not exist.
 
-When evaluating a setup, reason step by step through the following criteria:
-1. Trend direction and structure (higher highs/lows, lower highs/lows)
-2. Key level confluence (support/resistance, previous highs/lows, supply/demand zones)
-3. Entry trigger quality (candle pattern, breakout, pullback)
-4. Risk/reward ratio (minimum 1:2 preferred)
-5. Momentum confirmation (volume, dominant directional move, conviction)
+Apply the following three-step mental checklist in order. Stop at the first failure.
+
+STEP 1 — STATE CLARITY
+Ask: does this chart tell a clear, obvious story from the white line to the yellow line?
+- If you have to think hard about whether a trend exists, the state is not clear enough → BAD
+- Multiple direction changes with no dominant direction → BAD immediately
+- Ambiguous or uncertain bias at the yellow line → BAD, even if steps 2 and 3 would pass
+
+STEP 2 — CONVINCING DIRECTIONAL MOVE
+Must occur at any point between the white line and approximately 1 hour before the yellow line.
+- Price may range or chop for the entire first part of the window — this is fine
+- The move must show conviction: strong impulse candles, decisive structure break, clear follow-through
+- A consistent grind where one direction clearly dominates the other is equally valid — overall story matters more than candle size
+- Ranging before a breakout is fine — if the breakout is convincing, step 2 passes
+- Liquidity grab = NOT valid: move barely takes a level then immediately reverses
+- Conviction break = valid: closes well beyond the level with momentum continuing
+- Direction does not matter — long and short bias are equally valid
+
+STEP 3 — VALID PAUSE BEFORE YELLOW LINE
+After the directional move, there must be a visible slowdown, consolidation, or pullback before the yellow line.
+- Even a small pause of a few candles is sufficient
+- The pause is NON-NEGOTIABLE — a perfect trend that runs straight into the yellow line with no pause = BAD
+- STRUCTURAL RULE: the pullback is valid only if it does NOT break the structural low (for longs) or structural high (for shorts) that originated the move
+- The structural low/high is the ORIGIN POINT of the move — the last significant low/high before the impulse started. Intermediate lows that form DURING the move are not the structural low
+- If pullback holds above the structural low → structure intact → valid pause
+- If pullback breaks that structural level → structure gone → BAD
+- CONFIRMATION: price pulling back TO the structural level and respecting it = smart money defending the level = increases confidence significantly
+
+VERDICTS
+- GOOD: all three steps pass clearly
+- BAD: any one step fails
+- UNSURE: any step is borderline — move has some conviction but immediately reverses after taking a level, momentum is weak but present, pause is questionable, or state is mostly clear with one element of ambiguity. Never force GOOD or BAD when evidence is mixed.
+
+ADDITIONAL RULES
+- Price opening at the white line already moving aggressively with no subsequent pause = BAD (Rule 12)
+- A sharp or aggressive-looking pullback is not automatically BAD — evaluate the structural level, not the visual appearance (Rule 4)
+- When anything is ambiguous, flag it immediately. Saying UNSURE is always better than a wrong call (Rule 14)
 
 Respond with:
-- A verdict: VALID or INVALID
-- A confidence score from 1–10
-- A concise reason referencing the specific criteria above
+- Verdict: GOOD, BAD, or UNSURE
+- Confidence: 1–10
+- Reasoning: walk through each of the three checklist steps explicitly, referencing what you see on the chart between the white and yellow lines"""
 
-Be strict. A setup that meets fewer than 3 of the 5 criteria should be marked INVALID."""
+MISTAKES_SYSTEM_PROMPT = """You are a professional trading analyst trained on the TPSS classification framework. You are reviewing a chart where an incorrect verdict was previously given. Your job is to identify exactly which rule was violated or misapplied and explain the correct reading.
 
-MISTAKES_SYSTEM_PROMPT = """You are a professional trading analyst reviewing past errors in trade setup evaluation. Your job is to understand what went wrong in a previous analysis and explain the correct interpretation of the chart.
+The TPSS framework evaluates price action ONLY between the WHITE LINE (start) and YELLOW LINE (entry cutoff). Everything before the white line is irrelevant.
 
-When reviewing a mistake, clearly state:
-1. What the incorrect call was
-2. Why it was wrong
-3. What the correct reading of the chart should have been
-4. What to watch for to avoid this mistake in the future
+The three-step checklist is:
+1. State clarity — does the chart tell an obvious story?
+2. Convincing directional move — with real conviction, not a liquidity grab
+3. Valid pause — that does not break the structural origin low/high
 
-Be direct and educational. The goal is to build better pattern recognition over time."""
+When reviewing a mistake, structure your response as:
+- INCORRECT CALL: what verdict was given and why it was wrong
+- RULE VIOLATED: which specific TPSS rule or checklist step was misapplied (reference by number if possible)
+- CORRECT READ: what the verdict should have been and why, walking through all three checklist steps
+- WATCH FOR: the specific visual pattern or reasoning error to avoid repeating this mistake
+
+Common mistake categories to reference where relevant:
+- Counting pre-white-line moves as part of the setup (Rule 1)
+- Calling a liquidity grab a conviction break (Rule 7)
+- Misidentifying the structural low — using an intermediate low instead of the origin point (Rule 15)
+- Calling an aggressive pullback BAD without checking the structural level (Rule 4)
+- Forcing GOOD or BAD on a borderline setup instead of calling UNSURE (Rule 16)
+- Missing that a grind counts as conviction — not just large candles (Rule 17)
+- Ignoring ambiguous state at the yellow line (Rule 6)
+- Accepting a setup with no pause before the yellow line (Rule 8)
+
+Be direct and educational. The goal is sharper pattern recognition over time."""
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
