@@ -1,13 +1,15 @@
 """
 Fine-tune data service — Railway deployment
 POST /generate  →  pulls Supabase, builds JSONL, uploads to OpenAI, returns job IDs
-GET  /status    →  returns run history from log
+GET  /run-status →  returns current run state
+GET  /history   →  returns run history from log
 GET  /health    →  Railway health check
 """
 
 import json
 import os
 import io
+import re
 import logging
 from datetime import datetime
 from typing import Optional
@@ -25,14 +27,14 @@ app = FastAPI(title="Finetune Data Service")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict to your dashboard domain in production
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # ── Config (set as Railway env vars) ─────────────────────────────────────────
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_KEY = os.environ["SUPABASE_KEY"]
+SUPABASE_URL    = os.environ["SUPABASE_URL"]
+SUPABASE_KEY    = os.environ["SUPABASE_KEY"]
 OPENAI_API_KEY  = os.environ["OPENAI_API_KEY"]
 SETUPS_TABLE    = os.getenv("SETUPS_TABLE",   "training_entries")
 MISTAKES_TABLE  = os.getenv("MISTAKES_TABLE", "mistakes")
@@ -113,6 +115,30 @@ Common mistake categories to reference where relevant:
 
 Be direct and educational. The goal is sharper pattern recognition over time."""
 
+# ── URL converter ─────────────────────────────────────────────────────────────
+
+def tradingview_url_to_image(url: str) -> str:
+    """
+    Converts a TradingView snapshot URL to a direct S3 image URL
+    that OpenAI can fetch during fine-tuning.
+
+    https://www.tradingview.com/x/p3xAz85r/
+    → https://s3.tradingview.com/snapshots/p/p3xAz85r.png
+    """
+    if not url:
+        return url
+    # Already an S3 URL — leave it alone
+    if "s3.tradingview.com" in url:
+        return url
+    match = re.search(r'/x/([a-zA-Z0-9]+)/?$', url)
+    if match:
+        snapshot_id  = match.group(1)
+        first_letter = snapshot_id[0].lower()
+        return f"https://s3.tradingview.com/snapshots/{first_letter}/{snapshot_id}.png"
+    # Unrecognised format — return as-is and let OpenAI surface the error
+    log.warning(f"Could not convert TradingView URL to S3: {url}")
+    return url
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def fetch_all_rows(client, table: str) -> list[dict]:
@@ -127,10 +153,10 @@ def fetch_all_rows(client, table: str) -> list[dict]:
 
 
 def build_setup_example(row: dict) -> dict:
-    label = "GOOD" if row.get("is_valid_setup") else "BAD"
+    label   = "GOOD" if row.get("is_valid_setup") else "BAD"
     notes   = (row.get("notes") or "").strip()
     session = (row.get("session") or "unknown").replace("_", " ").title()
-    url     = row.get("tradingview_url", "")
+    url     = tradingview_url_to_image(row.get("tradingview_url", ""))
     return {
         "messages": [
             {"role": "system", "content": SETUPS_SYSTEM_PROMPT},
@@ -146,7 +172,7 @@ def build_setup_example(row: dict) -> dict:
 def build_mistake_example(row: dict) -> dict:
     mistake = (row.get("mistake") or "").strip()
     reason  = (row.get("reason")  or "").strip()
-    url     = row.get("screenshot_url", "")
+    url     = tradingview_url_to_image(row.get("screenshot_url", ""))
     return {
         "messages": [
             {"role": "system", "content": MISTAKES_SYSTEM_PROMPT},
@@ -194,7 +220,7 @@ def write_log(entry: dict):
 
 run_state: dict = {"status": "idle", "detail": None}
 
-# ── Background job ─────────────────────────────────────────────────────────────
+# ── Background job ────────────────────────────────────────────────────────────
 
 def run_pipeline():
     global run_state
@@ -230,7 +256,7 @@ def run_pipeline():
         m_train_id = upload_to_openai(openai, examples_to_bytes(train_m), f"mistakes_{datestamp}_{mn}rows_train.jsonl")
         m_val_id   = upload_to_openai(openai, examples_to_bytes(val_m),   f"mistakes_{datestamp}_{mn}rows_val.jsonl")
 
-        # ── Start fine-tune jobs ───────────────────────────────────────────────
+        # ── Start fine-tune jobs ──────────────────────────────────────────────
         run_state["detail"] = "Starting fine-tune jobs on OpenAI..."
         setups_job = openai.fine_tuning.jobs.create(
             training_file=s_train_id,
@@ -272,7 +298,7 @@ def run_pipeline():
         run_state = {"status": "error", "detail": str(e)}
         log.exception("Pipeline failed")
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
